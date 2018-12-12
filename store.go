@@ -64,10 +64,11 @@ func deliverCoke(cokeDelivery chan int) {
 		for i := 0; i < 24; i++ {
 			cokeDelivery <- 1
 			books.cokeDelivered++
-			fmt.Printf("			Coke delivered!\n")
 		}
+		fmt.Printf("	Case #%v of Coke delivered!\n", j)
 		time.Sleep(500 * time.Millisecond)
 	}
+	fmt.Println("Done with Coke deliveries!")
 	close(cokeDelivery)
 	waitGroup.Done()
 }
@@ -82,10 +83,11 @@ func deliverPepsi(pepsiDelivery chan int) {
 		for i := 0; i < 24; i++ {
 			pepsiDelivery <- 1
 			books.pepsiDelivered++
-			fmt.Printf("			Pepsi delivered!\n")
 		}
+		fmt.Printf("	Case #%v of Pepsi delivered!\n", j)
 		time.Sleep(500 * time.Millisecond)
 	}
+	fmt.Println("Done with Pepsi deliveries!")
 	close(pepsiDelivery)
 	waitGroup.Done()
 }
@@ -130,11 +132,14 @@ func stocker(cokeDelivery chan int, pepsiDelivery chan int) {
 		if pepsiDelivery == nil && cokeDelivery == nil {
 			close(shelf.CokeChannel)
 			close(shelf.PepsiChannel)
+			closed = true
+			fmt.Println("Finished stocking all sodas!")
+			waitGroup.Done()
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	waitGroup.Done()
+
 }
 
 //Go routine to spawn customers
@@ -150,12 +155,14 @@ func spawnCustomers(checkout chan customer) {
 		time.Sleep(75 * time.Millisecond)
 	}
 	//When the store closes, close the checkout channel
+	fmt.Println("Closing the checkout queue")
 	close(checkout)
 	waitGroup.Done()
 }
 
 //Customers take sodas off the shelf in sets of 6, 12, 18, or 24
 func shop(cust customer, checkout chan customer) {
+	waitGroup.Add(1)
 	targetNumber := (rand.Intn(4) * 6) + 6
 	targetBrand := Brand(rand.Intn(2))
 	sodas := 0
@@ -165,55 +172,64 @@ func shop(cust customer, checkout chan customer) {
 			if shelf.CokeChannel == nil {
 				return
 			}
-			fmt.Println("		Putting coke in cart.")
 			//Otherwise take a coke off the shelf
 			<-shelf.CokeChannel
 			//Decrement the coke counter
 			shelf.Coke--
 		}
+		fmt.Printf("	Put %v Cokes in cart.\n", sodas)
 	} else {
 		for ; sodas < targetNumber; sodas++ {
 			//If we've closed
 			if shelf.PepsiChannel == nil {
 				return
 			}
-			fmt.Println("		Putting pepsi in cart.")
 			//Otherwise take a Pepsi off the shelf
 			<-shelf.PepsiChannel
 			//Decrement the Pepsi counter
 			shelf.Pepsi--
 		}
+		fmt.Printf("	Put %v Pepsis in cart.\n", sodas)
 	}
 	cust.brand = targetBrand
 	cust.sodas = sodas
-	checkout <- cust
+	//This condition currently terminates too early.
+	//We wind up with a bunch of customers with full carts in the store and no way to pay
+	//Need to find a way to process them, or process customers with higher priority
+	if closed == false {
+		checkout <- cust
+	}
+	waitGroup.Done()
 	return
 }
 
-//Checkout is a go routine
+//Checkout is not a go routine
 //At checkout, record the amount of money
 func checkOut(cust customer) {
-	waitGroup.Add(1)
 	fmt.Println("Checking out customer")
+	var sodaBrand string
 	if cust.brand == Coke {
 		books.cokeSold += cust.sodas
 	} else {
 		books.pepsiSold += cust.sodas
 	}
-	waitGroup.Done()
+	if cust.brand == Coke {
+		sodaBrand = "Coke"
+	} else {
+		sodaBrand = "Pepsi"
+	}
+	fmt.Printf("Just sold %d %vs\n", cust.sodas, sodaBrand)
 }
 
 //go routine representing a checkout clerk
-func clerk(checkout chan customer, quittingTime chan bool) {
+func clerk(checkout chan customer) {
 	waitGroup.Add(1)
 	//While checkout is not closed and empty
 	for cust := range checkout {
 		fmt.Println("Customer in line")
 		checkOut(cust)
-		fmt.Printf("Just sold %d %vs", cust.sodas, cust.brand)
 	}
 	fmt.Println("Quitting time.")
-	//quittingTime <- true //Using a wait group to synchronize
 	waitGroup.Done()
 }
 
@@ -223,8 +239,7 @@ func main() {
 	cokeDelivery := make(chan int)
 	pepsiDelivery := make(chan int)
 	checkoutLine := make(chan customer)
-	quittinTime := make(chan bool)
-	go clerk(checkoutLine, quittinTime)
+	go clerk(checkoutLine)
 	//time.Sleep(10 * time.Millisecond)
 	go spawnCustomers(checkoutLine)
 	time.Sleep(1000 * time.Millisecond)
@@ -241,6 +256,6 @@ func main() {
 	fmt.Println("********************************************************")
 	fmt.Printf("The store stocked %d Cokes and %d Pepsis.\n", books.pepsiDelivered, books.pepsiDelivered)
 	fmt.Printf("And sold %d Cokes and %d Pepsis.\n", books.cokeSold, books.pepsiSold)
-	fmt.Printf("The end of day balance was %v.\n", balance)
+	fmt.Printf("The end of day balance was $%v.\n", balance)
 	fmt.Println("********************************************************")
 }
