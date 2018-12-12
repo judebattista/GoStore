@@ -1,5 +1,11 @@
 //Coke and Pepsi
+//Currently the main bottleneck is the Stocker routine, as demonstrated by the time gap between the deliveries finishing and the checkout line closing
+//We can work around this by adding more Stocker routines, or having the Stocker stock cases instead of cans
 
+//In order to move the bottleneck to the delivery person, we can improve the Stockers performance and have the delivery people deliver individual cans instead of cases.
+
+//To move the bottleneck to the the check-out clerk, we can just have the clerk. Slow. Way. Down. If they only check out one customer a minute, we will have
+//a rapidly filling queue of unhappy customers.
 package main
 
 import (
@@ -131,7 +137,6 @@ func stocker(cokeDelivery chan int, pepsiDelivery chan int) {
 	waitGroup.Done()
 }
 
-/*
 //Go routine to spawn customers
 //Each customer is a go routine
 //Customers take soda in sets of six off the shelf and go to checkout
@@ -141,60 +146,7 @@ func spawnCustomers(checkout chan customer) {
 	for closed == false {
 		fmt.Println("			Spawning Customer.")
 		var cust customer
-		cust.sodas, cust.brand = shop()
-		checkout <- cust
-		time.Sleep(75 * time.Millisecond)
-	}
-	//When the store closes, close the checkout channel
-	close(checkout)
-	waitGroup.Done()
-}
-
-//Customers take sodas off the shelf in sets of 6, 12, 18, or 24
-func shop() (sodas int, targetBrand Brand) {
-	targetNumber := (rand.Intn(4) * 6) + 6
-	targetBrand = Brand(rand.Intn(2))
-	sodas = 0
-	if targetBrand == Coke {
-		for ; sodas < targetNumber; sodas++ {
-			//If we've closed
-			if shelf.CokeChannel == nil {
-				return
-			}
-			fmt.Println("		Putting coke in cart.")
-			//Otherwise take a coke off the shelf
-			<-shelf.CokeChannel
-			//Decrement the coke counter
-			shelf.Coke--
-		}
-	} else {
-		for ; sodas < targetNumber; sodas++ {
-			//If we've closed
-			if shelf.PepsiChannel == nil {
-				return
-			}
-			fmt.Println("		Putting pepsi in cart.")
-			//Otherwise take a Pepsi off the shelf
-			<-shelf.PepsiChannel
-			//Decrement the Pepsi counter
-			shelf.Pepsi--
-		}
-	}
-
-	return
-}
-*/
-
-//Go routine to spawn customers
-//Each customer is a go routine
-//Customers take soda in sets of six off the shelf and go to checkout
-//Arrive every 100 ms, stay until they get what they want or the store closes
-func spawnCustomers(checkout chan customer) {
-	waitGroup.Add(1)
-	for closed == false {
-		fmt.Println("			Spawning Customer.")
-		var cust customer
-		shop(cust, checkout)
+		go shop(cust, checkout)
 		time.Sleep(75 * time.Millisecond)
 	}
 	//When the store closes, close the checkout channel
